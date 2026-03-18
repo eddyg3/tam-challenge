@@ -84,13 +84,13 @@ Three VMs on the libvirt default NAT network. IPs are DHCP-assigned and discover
 ```
   Your workstation (Linux, x86_64 or aarch64)
   +---------------------------------------------------------+
-  |  libvirt default network (NAT, 192.168.x.0/24)         |
+  |  libvirt default network (NAT, 192.168.x.0/24)          |
   |                                                         |
-  |  +----------------+  +-----------+  +-----------+      |
-  |  | cp-1           |  | worker-1  |  | worker-2  |      |
-  |  | 2 vCPU / 4 GiB |  | 2v / 4Gi |  | 2v / 4Gi |      |
-  |  | 20 GB disk     |  | 15 GB     |  | 15 GB     |      |
-  |  +----------------+  +-----------+  +-----------+      |
+  |  +----------------+  +-----------+  +-----------+       |
+  |  | cp-1           |  | worker-1  |  | worker-2  |       |
+  |  | 2 vCPU / 4 GiB |  | 2v / 4Gi  |  | 2v / 4Gi  |       |
+  |  | 20 GB disk     |  | 15 GB     |  | 15 GB     |       |
+  |  +----------------+  +-----------+  +-----------+       |
   |                                                         |
   |  Calico pod network: 10.244.0.0/16                      |
   |  Service CIDR:       10.96.0.0/12                       |
