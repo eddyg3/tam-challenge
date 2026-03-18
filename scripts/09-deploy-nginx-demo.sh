@@ -210,9 +210,8 @@ show_summary() {
     printf 'URL:\n'
     printf '  https://%s:%s\n\n' "${HOST_NAME}" "${nodeport}"
 
-    printf 'Commands:\n'
-    printf '  kubectl --kubeconfig %s -n %s get all\n' "${DEPLOYER_KUBECONFIG}" "${NAMESPACE}"
-    printf '  helm --kubeconfig %s -n %s list\n' "${DEPLOYER_KUBECONFIG}" "${NAMESPACE}"
+    printf 'Next Step: print access instructions and CA trust setup\n'
+    printf '  ./scripts/10-print-demo-access.sh\n'
     printf '\n'
 }
 
