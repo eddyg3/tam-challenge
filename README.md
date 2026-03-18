@@ -197,4 +197,4 @@ Generated state (kubeconfigs, join tokens, PKI, RBAC manifests) goes to `.runtim
 
 ## Design Notes
 
-See `architecture.docx` for component choices, tradeoffs, and the RBAC model.
+See `design.md` for component choices, tradeoffs, and the RBAC model.
