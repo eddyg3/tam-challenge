@@ -1,0 +1,26 @@
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: stable
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  clusterIssuer: lab-ca
+  host: nginx.lab.local
+  tls:
+    enabled: true
+    secretName: nginx-tls
+
+labels:
+  appPartOf: tam-challenge
