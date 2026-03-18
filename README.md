@@ -117,14 +117,14 @@ Three `e2-small` instances in a single zone, on the default VPC. SSH access is r
   |    <cluster>-cluster-internal tcp+udp all, icmp          |
   |    <cluster>-cluster-ipip     proto 4 (Calico IP-in-IP)  |
   |                                                          |
-  |  +------------------+  +------------+  +------------+   |
-  |  | cp-1             |  | worker-1   |  | worker-2   |   |
-  |  | internal IP      |  | internal + |  | internal + |   |
-  |  | + external IP    |  | external   |  | external   |   |
-  |  | 20 GB            |  | 15 GB      |  | 15 GB      |   |
-  |  +------------------+  +------------+  +------------+   |
+  |  +------------------+  +------------+  +------------+    |
+  |  | cp-1             |  | worker-1   |  | worker-2   |    |
+  |  | internal IP      |  | internal + |  | internal + |    |
+  |  | + external IP    |  | external   |  | external   |    |
+  |  | 20 GB            |  | 15 GB      |  | 15 GB      |    |
+  |  +------------------+  +------------+  +------------+    |
   |                                                          |
-  |  Calico pod network: 10.244.0.0/16 (IP-in-IP mode)      |
+  |  Calico pod network: 10.244.0.0/16 (IP-in-IP mode)       |
   |  Service CIDR:       10.96.0.0/12                        |
   |                                                          |
   |  ingress-nginx: NodePort (hit any worker external IP)    |
