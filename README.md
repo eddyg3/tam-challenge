@@ -1,146 +1,200 @@
-# Kubernetes TAM Challenge
+# kubeadm-tam-challenge
 
-This repository contains a reproducible Kubernetes cluster deployment designed for a technical TAM interview exercise.
+Kubernetes cluster bootstrap using kubeadm, scripted end-to-end. Supports local KVM/libvirt VMs and GCP Compute Engine. Covers node provisioning, CNI, ingress, TLS, RBAC, and a working demo app.
 
-The solution demonstrates:
-
-- Kubernetes cluster bootstrapping with kubeadm  
-- Node preparation via cloud-init  
-- Infrastructure provisioning using libvirt  
-- RBAC and CSR based user management  
-- TLS using cert-manager  
-- Operational tooling and troubleshooting workflows
-
-The cluster runs locally using KVM/libvirt and is designed so the same node preparation logic can be reused in cloud environments.
+All scripts are idempotent and can be re-run safely.
 
 ---
 
-# Architecture
+## Steps
 
-The project is structured in three layers.
-
-## 1. Host Preparation
-
-Prepare a Linux machine to run local VMs.  
-<br/>sudo ./infra/local/bootstrap-host.sh
-
-This installs:
-
-- qemu-kvm  
-- libvirt  
-- virt-install  
-- cloud-image-utils  
-- bridge-utils  
-- cpu-checker
+| # | Phase | Script |
+|---|---|---|
+| 1 | Provision VMs | `infra/local/deploy.sh` or `infra/cloud/gcp/deploy.sh` |
+| 2 | Initialize control plane | `scripts/02-init-cluster.sh` |
+| 3 | Join worker nodes | `scripts/03-join-workers.sh` |
+| 4 | Install ingress-nginx | `scripts/04-install-ingress-nginx.sh` |
+| 5 | Install cert-manager | `scripts/05-install-cert-manager.sh` |
+| 6 | Create ClusterIssuer | `scripts/06-setup-cluster-issuer.sh` |
+| 7 | Create namespace + RBAC | `scripts/07-setup-namespace-rbac.sh` |
+| 8 | Create deployer user + kubeconfig | `scripts/08-create-user.sh` |
+| 9 | Deploy nginx demo app | `scripts/09-deploy-nginx-demo.sh` |
+| 10 | Print access summary | `scripts/10-print-demo-access.sh` |
 
 ---
 
-## 2. Infrastructure Provisioning
+## Quickstart
 
-Create the cluster nodes.  
-<br/>./infrastructure/local/deploy.sh  
-<br/>
+`run-demo.sh` walks through every step interactively. At each step you can run it, skip it, or quit.
 
-This script:
+```bash
+./scripts/run-demo.sh local       # KVM/libvirt on your workstation
+./scripts/run-demo.sh gcp         # GCP Compute Engine
+```
 
-- downloads the Ubuntu cloud image  
-- creates qcow2 overlay disks  
-- generates cloud-init configuration  
-- provisions three VMs  
-- waits for SSH availability  
-- waits for cloud-init completion
-
-Nodes created:  
-cp-1  
-worker-1  
-worker-2  
-<br/>
+Press **Enter** to run a step, **s** to skip, **q** to quit.
 
 ---
 
-## 3. Cluster Deployment
+## Prerequisites
 
-After infrastructure is ready:  
-./scripts/deploy.sh  
-<br/>
+### Local (KVM)
 
-This will:
+Install dependencies via the host bootstrap script (run once, requires `sudo`):
 
-- initialize the Kubernetes control plane  
-- join worker nodes  
-- install the CNI  
-- install cert-manager  
-- configure RBAC  
-- deploy the demo application
+```bash
+sudo ./infra/local/bootstrap-host.sh
+```
 
----
+This installs: `libvirt`, `virsh`, `virt-install`, `qemu-img`, `cloud-localds`, and related tooling.
 
-# Networking
+### GCP
 
-Local VM network:  
-192.168.251.0/24
+- `gcloud` CLI, authenticated to a project
+- Edit `infra/cloud/gcp/env.sh` with your `PROJECT_ID`, `REGION`, and `ZONE`
 
-Node IPs:  
-cp-1 192.168.251.10  
-worker-1 192.168.251.11  
-worker-2 192.168.251.12  
-<br/>Kubernetes networking:  
-Pod CIDR: 10.244.0.0/16  
-Service CIDR: 10.96.0.0/12  
-<br/>---  
-<br/># Repository Layout  
-config/  
-scripts/  
-infrastructure/  
-manifests/  
-debug/  
-docs/  
-artifacts/  
-<br/>
+### Both
 
-Generated files such as VM disks, cloud-init configs, and logs are written to `artifacts/`.
+- SSH key pair at `~/.ssh/id_ed25519` (override via `SSH_PUBLIC_KEY_PATH`)
+- `openssl` for user certificate generation (script 08)
 
 ---
 
-# Local Deployment Workflow
+## Configuration
 
-Step 1: Prepare host  
+Cluster parameters are in `config/cluster.env`:
 
-1) sudo ./infra/local/bootstrap-host.sh
-2) ./infra/local/deploy.sh - have it mention 
+| Variable | Default | Description |
+|---|---|---|
+| `K8S_VERSION` | `1.32.0` | Kubernetes version |
+| `POD_CIDR` | `10.244.0.0/16` | Pod network CIDR |
+| `SERVICE_CIDR` | `10.96.0.0/12` | Service network CIDR |
+| `VM_VCPU` | `2` | vCPUs per node |
+| `VM_MEMORY_MB` | `4096` | RAM per node (MiB) |
+| `DOMAIN_SUFFIX` | `lab.local` | Domain used for ingress hostnames |
 
-optional checks checks scripts/peer-do.sh --script scripts/node-checker.sh
+---
 
-next step: ./scripts/init-cluster.sh
-3) ./scripts/init-cluster.sh
-4) ./scripts/join-workers.sh
+## Cluster Topology
 
+### Local (KVM/libvirt)
+
+Three VMs on the libvirt default NAT network. IPs are DHCP-assigned and discovered at deploy time.
+
+```
+  Your workstation (Linux, x86_64 or aarch64)
+  +---------------------------------------------------------+
+  |  libvirt default network (NAT, 192.168.x.0/24)         |
+  |                                                         |
+  |  +----------------+  +-----------+  +-----------+      |
+  |  | cp-1           |  | worker-1  |  | worker-2  |      |
+  |  | 2 vCPU / 4 GiB |  | 2v / 4Gi |  | 2v / 4Gi |      |
+  |  | 20 GB disk     |  | 15 GB     |  | 15 GB     |      |
+  |  +----------------+  +-----------+  +-----------+      |
+  |                                                         |
+  |  Calico pod network: 10.244.0.0/16                      |
+  |  Service CIDR:       10.96.0.0/12                       |
+  |                                                         |
+  |  ingress-nginx: NodePort (no cloud LB)                  |
+  +---------------------------------------------------------+
+```
+
+### GCP (Compute Engine)
+
+Three `e2-small` instances in a single zone, on the default VPC. SSH access is restricted to your detected WAN IP at deploy time.
+
+```
+  Internet
+     |
+     | SSH (tcp/22) -- source: your WAN IP only
+     | HTTP/HTTPS   -- NodePort on worker external IPs
+     |
+  +--+-------------------------------------------------------+
+  |  GCP default VPC                                         |
+  |                                                          |
+  |  Firewall rules:                                         |
+  |    <cluster>-ssh              tcp/22, src: <your WAN IP> |
+  |    <cluster>-cluster-internal tcp+udp all, icmp          |
+  |    <cluster>-cluster-ipip     proto 4 (Calico IP-in-IP)  |
+  |                                                          |
+  |  +------------------+  +------------+  +------------+   |
+  |  | cp-1             |  | worker-1   |  | worker-2   |   |
+  |  | internal IP      |  | internal + |  | internal + |   |
+  |  | + external IP    |  | external   |  | external   |   |
+  |  | 20 GB            |  | 15 GB      |  | 15 GB      |   |
+  |  +------------------+  +------------+  +------------+   |
+  |                                                          |
+  |  Calico pod network: 10.244.0.0/16 (IP-in-IP mode)      |
+  |  Service CIDR:       10.96.0.0/12                        |
+  |                                                          |
+  |  ingress-nginx: NodePort (hit any worker external IP)    |
+  +----------------------------------------------------------+
+```
+
+Stack on both environments:
+- **OS**: Ubuntu 22.04 (cloud image, cloud-init provisioned)
+- **CNI**: Calico v3.28.0
+- **Ingress**: ingress-nginx via NodePort
+- **TLS**: cert-manager with a self-signed ClusterIssuer
+
+---
+
+## Repository Layout
+
+```
+.
+├── config/
+│   └── cluster.env              # Cluster-wide config
+├── infra/
+│   ├── local/
+│   │   ├── bootstrap-host.sh    # One-time host setup
+│   │   ├── deploy.sh            # Provision KVM VMs
+│   │   └── teardown.sh          # Destroy KVM VMs
+│   └── cloud/
+│       └── gcp/
+│           ├── deploy.sh        # Provision GCP instances
+│           ├── teardown.sh      # Destroy GCP instances
+│           └── env.sh           # GCP project/region/zone
+├── manifests/
+│   └── calico/
+│       └── calico-v3.28.0.yaml  # Pinned Calico manifest
+└── scripts/
+    ├── common.sh                # Shared logging + SSH helpers
+    ├── node-prep.sh             # Node OS setup (runs via cloud-init)
+    ├── node-checker.sh          # Pre-flight checks
+    ├── peer-do.sh               # Run commands across all nodes
+    ├── run-demo.sh              # Interactive end-to-end runner
+    ├── 02-init-cluster.sh       # kubeadm init + Calico
+    ├── 03-join-workers.sh       # kubeadm join
+    ├── 04-install-ingress-nginx.sh
+    ├── 05-install-cert-manager.sh
+    ├── 06-setup-cluster-issuer.sh
+    ├── 07-setup-namespace-rbac.sh
+    ├── 08-create-user.sh
+    ├── 09-deploy-nginx-demo.sh
+    └── 10-print-demo-access.sh
+```
+
+---
+
+## Runtime Artifacts
+
+Generated state (kubeconfigs, join tokens, PKI, RBAC manifests) goes to `.runtime/tam-kubeadm/`. The directory is gitignored. Delete it to reset without touching the repo.
+
+---
+
+## Teardown
+
+```bash
+# Local
 ./infra/local/teardown.sh
-./infra/local/teardown.sh --dry-run
 
-
-Each node runs with:
-
-- 2 vCPU  
-- 4 GB RAM  
-- 20–25 GB disk
-
-Total cluster size: 3 nodes.
+# GCP
+./infra/cloud/gcp/teardown.sh
+```
 
 ---
 
-# Notes on Host Modifications
+## Design Notes
 
-The host machine is used only to run libvirt and create the virtual machines.
-
-All Kubernetes node configuration, including swap disablement and container runtime installation, occurs **inside the VM nodes** via cloud-init and `node-prep.sh`.
-
-The deployment scripts do not modify host networking or system configuration beyond installing virtualization dependencies.
-
----
-
-# Current Status
-
-Infrastructure provisioning and node preparation are implemented.
-
-Cluster bootstrap, RBAC configuration, and application deployment scripts are currently being implemented.
+See `architecture.docx` for component choices, tradeoffs, and the RBAC model.
